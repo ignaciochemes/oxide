@@ -14,6 +14,12 @@ services:
       OXIDE_CONFIG: /app/config.server.toml
     volumes:
       - ./config.server.toml:/app/config.server.toml:ro
+    # Subimos el límite de file descriptors: bajo mucha concurrencia, el default
+    # (1024) se queda corto y el proxy empieza a rechazar/cerrar conexiones.
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     restart: unless-stopped
 
   dashboard:
