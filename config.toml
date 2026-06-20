@@ -12,9 +12,19 @@ url = "http://127.0.0.1:3001"
 [[upstreams]]
 url = "http://127.0.0.1:3002"
 
+[[upstreams]]
+url = "http://127.0.0.1:3003"
+
 # Chequeo de salud (opcional). Si borrás esta sección, se usan estos valores
 # por defecto. Oxide saca de la rotación a los backends que no respondan 2xx.
 [health_check]
 path = "/"          # a qué path se le hace GET para chequear
 interval_secs = 5   # cada cuántos segundos se chequea
 timeout_secs = 2    # cuánto esperar antes de darlo por caído
+
+# Reenvío del proxy (opcional). Reintenta en otro backend si falla, pero solo
+# para métodos idempotentes (GET, HEAD, PUT, DELETE, OPTIONS).
+[proxy]
+request_timeout_secs = 10        # cuánto esperar la respuesta del backend
+max_retries = 2                  # reintentos extra en otro backend si falla
+status_path = "/_oxide/status"   # GET a este path devuelve el estado en JSON

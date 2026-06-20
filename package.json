@@ -1,0 +1,19 @@
+{
+  "name": "oxide-workspace",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Arranque conjunto de Oxide (Rust) + dashboard (Next.js)",
+  "scripts": {
+    "setup": "cd web && bun install",
+    "dev": "concurrently -k -n oxide,web -c yellow,cyan \"cargo run\" \"cd web && bun run dev\"",
+    "dev:oxide": "cargo run",
+    "dev:web": "cd web && bun run dev",
+    "mocks": "concurrently -k -n svc1,svc2,svc3 -c blue,magenta,green \"node scripts/mock-backend.js 3001\" \"node scripts/mock-backend.js 3002\" \"node scripts/mock-backend.js 3003\"",
+    "traffic": "node scripts/traffic.js",
+    "demo": "concurrently -k -n svc1,svc2,svc3,oxide,web -c blue,magenta,green,yellow,cyan \"node scripts/mock-backend.js 3001\" \"node scripts/mock-backend.js 3002\" \"node scripts/mock-backend.js 3003\" \"cargo run\" \"cd web && bun run dev\"",
+    "build": "cargo build --release && cd web && bun run build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

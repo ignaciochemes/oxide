@@ -1,6 +1,6 @@
 [package]
 name = "oxide"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Un reverse proxy / load balancer HTTP escrito en Rust"
 license = "Apache-2.0"
@@ -18,6 +18,12 @@ bytes = "1"
 # Parseo de la configuración (config.toml -> structs de Rust)
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
+# Para serializar el endpoint de estado y los eventos a JSON
+serde_json = "1"
+# WebSocket sobre hyper (para el dashboard en vivo)
+hyper-tungstenite = "0.18"
+# Utilidades de streams/sinks (split del websocket, send/next)
+futures-util = "0.3"
 # Logging estructurado
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

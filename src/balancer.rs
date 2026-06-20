@@ -11,16 +11,17 @@
 //! El `Arc` hace que ambos compartan EXACTAMENTE el mismo `Backend` (mismo
 //! atomic), y el atomic permite leerlo/escribirlo sin `Mutex`.
 
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use hyper::Uri;
 
-/// Un backend: su URL y si está sano en este momento.
+/// Un backend: su URL, si está sano, y cuántas requests le tocaron.
 #[derive(Debug)]
 pub struct Backend {
     pub uri: Uri,
     healthy: AtomicBool,
+    requests: AtomicU64,
 }
 
 impl Backend {
@@ -32,6 +33,11 @@ impl Backend {
     /// Marca el backend como sano (`true`) o caído (`false`).
     pub fn set_healthy(&self, value: bool) {
         self.healthy.store(value, Ordering::Relaxed);
+    }
+
+    /// Cuántas requests se le rutearon hasta ahora (para el endpoint de estado).
+    pub fn request_count(&self) -> u64 {
+        self.requests.load(Ordering::Relaxed)
     }
 }
 
@@ -54,6 +60,7 @@ impl Balancer {
             backends.push(Arc::new(Backend {
                 uri,
                 healthy: AtomicBool::new(true),
+                requests: AtomicU64::new(0),
             }));
         }
 
@@ -74,6 +81,8 @@ impl Balancer {
             let i = self.next.fetch_add(1, Ordering::Relaxed) % n;
             let backend = &self.backends[i];
             if backend.is_healthy() {
+                // Contamos la request ruteada a este backend.
+                backend.requests.fetch_add(1, Ordering::Relaxed);
                 // Clonar el Arc es barato: solo suma 1 al contador de referencias.
                 return Some(backend.clone());
             }

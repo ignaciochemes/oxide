@@ -7,6 +7,41 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
 
 ## [Sin publicar]
 
+## [0.2.0] - 2026-06-20
+
+### Añadido
+- **Graceful shutdown**: con Ctrl+C, Oxide deja de aceptar conexiones nuevas y
+  espera a que terminen las que están en curso (tope de 10s).
+- **Dashboard en vivo** (`web/`, Next.js + WebSocket): diagrama ramificado de la
+  infraestructura con pulsos animados por request, tarjetas de backend con salud
+  y conteos, y feed de logs en tiempo real. Se reconecta solo.
+- **Bus de eventos** interno (`tokio::broadcast`, `src/events.rs`): el proxy y el
+  health checker publican eventos (request completada, cambio de salud).
+- **Servidor admin** (`src/admin.rs`) en puerto aparte (`[admin] listen`,
+  default `127.0.0.1:9090`) con `GET /status` (JSON + CORS) y WebSocket `/ws`.
+- Arranque conjunto: `package.json` raíz con `bun run dev` (Oxide + dashboard
+  vía `concurrently`).
+- **Microservicio simulado** `scripts/mock-backend.js` (rutas tipo API, latencia
+  y `ERROR_RATE` opcional) y comando `bun run demo` que levanta 3 instancias
+  (3001/3002/3003) + Oxide + dashboard de una.
+- Contador de requests por backend (`AtomicU64`).
+- **Endpoint de estado** en `proxy.status_path` (por defecto `/_oxide/status`):
+  devuelve JSON con cada backend (URL, salud, requests recibidas) y el total.
+  Lo atiende Oxide mismo, no se proxea ni se cuenta como request.
+- Contador de requests por backend (`AtomicU64`).
+- **Timeout por request** hacia el backend (`proxy.request_timeout_secs`): si no
+  responde a tiempo, se corta con `504 Gateway Timeout`.
+- **Reintentos en otro backend** ante fallo o timeout (`proxy.max_retries`).
+  Solo para métodos idempotentes (GET, HEAD, PUT, DELETE, OPTIONS, TRACE); los
+  no idempotentes (POST, PATCH) no se reintentan para evitar efectos duplicados.
+- Nueva sección opcional `[proxy]` en `config.toml`.
+- Script `scripts/flaky-backend.js` y `config.test.toml` para probar
+  reintentos/timeouts.
+
+### Cambiado
+- El proxy ahora bufferiza el body de la request en memoria (necesario para
+  poder reenviarlo en los reintentos).
+
 ## [0.1.0] - 2026-06-20
 
 ### Añadido
@@ -23,5 +58,6 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
 - Logging estructurado con `tracing`, configurable vía `RUST_LOG`.
 - Script `scripts/toy-backend.js` para levantar backends de prueba.
 
-[Sin publicar]: https://github.com/ignaciochemes/oxide/compare/v0.1.0...HEAD
+[Sin publicar]: https://github.com/ignaciochemes/oxide/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/ignaciochemes/oxide/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ignaciochemes/oxide/releases/tag/v0.1.0

@@ -17,6 +17,32 @@ pub struct Config {
     /// `#[serde(default)]` usa los valores por defecto de `HealthCheck`.
     #[serde(default)]
     pub health_check: HealthCheck,
+    /// Configuración del proxy (timeouts y reintentos). También opcional.
+    #[serde(default)]
+    pub proxy: ProxyConfig,
+    /// Configuración del servidor admin / dashboard (WebSocket). Opcional.
+    #[serde(default)]
+    pub admin: AdminConfig,
+}
+
+/// Servidor aparte que expone el estado y el WebSocket en vivo para el dashboard.
+#[derive(Debug, Deserialize, Clone)]
+pub struct AdminConfig {
+    /// Dirección donde escucha el admin, ej. `"127.0.0.1:9090"`.
+    #[serde(default = "default_admin_listen")]
+    pub listen: String,
+}
+
+impl Default for AdminConfig {
+    fn default() -> Self {
+        Self {
+            listen: default_admin_listen(),
+        }
+    }
+}
+
+fn default_admin_listen() -> String {
+    "127.0.0.1:9090".to_string()
 }
 
 /// Un backend (uno de tus microservicios).
@@ -40,6 +66,21 @@ pub struct HealthCheck {
     pub timeout_secs: u64,
 }
 
+/// Parámetros de reenvío del proxy.
+#[derive(Debug, Deserialize, Clone)]
+pub struct ProxyConfig {
+    /// Cuántos segundos esperar la respuesta del backend antes de cortar.
+    #[serde(default = "default_request_timeout")]
+    pub request_timeout_secs: u64,
+    /// Cuántos reintentos extra hacer (en otro backend) si la request falla.
+    /// Solo aplica a métodos idempotentes (GET, HEAD, PUT, DELETE, OPTIONS).
+    #[serde(default = "default_max_retries")]
+    pub max_retries: u32,
+    /// Path interno que devuelve el estado de Oxide en JSON (no se proxea).
+    #[serde(default = "default_status_path")]
+    pub status_path: String,
+}
+
 // Valores por defecto. serde los llama cuando el campo falta en el TOML.
 fn default_path() -> String {
     "/".to_string()
@@ -50,6 +91,15 @@ fn default_interval() -> u64 {
 fn default_timeout() -> u64 {
     2
 }
+fn default_request_timeout() -> u64 {
+    10
+}
+fn default_max_retries() -> u32 {
+    2
+}
+fn default_status_path() -> String {
+    "/_oxide/status".to_string()
+}
 
 /// Permite tener un `HealthCheck` con todos los valores por defecto cuando la
 /// sección `[health_check]` no aparece en el archivo.
@@ -59,6 +109,16 @@ impl Default for HealthCheck {
             path: default_path(),
             interval_secs: default_interval(),
             timeout_secs: default_timeout(),
+        }
+    }
+}
+
+impl Default for ProxyConfig {
+    fn default() -> Self {
+        Self {
+            request_timeout_secs: default_request_timeout(),
+            max_retries: default_max_retries(),
+            status_path: default_status_path(),
         }
     }
 }

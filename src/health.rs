@@ -17,9 +17,10 @@ use hyper_util::rt::TokioExecutor;
 
 use crate::balancer::Balancer;
 use crate::config::HealthCheck;
+use crate::events::{self, Event, EventTx};
 
 /// Bucle infinito de chequeos. Se lanza una sola vez desde `main`.
-pub async fn run(balancer: Arc<Balancer>, cfg: HealthCheck) {
+pub async fn run(balancer: Arc<Balancer>, cfg: HealthCheck, events: EventTx) {
     // Cliente propio del health checker. Manda requests con body vacío
     // (`Empty<Bytes>`), por eso no podemos reusar el cliente del proxy, que
     // está tipado para reenviar el body entrante (`Incoming`).
@@ -42,13 +43,21 @@ pub async fn run(balancer: Arc<Balancer>, cfg: HealthCheck) {
             let was = backend.is_healthy();
             backend.set_healthy(healthy);
 
-            // Solo logueamos en los cambios de estado, no en cada chequeo.
+            // Solo actuamos en los cambios de estado, no en cada chequeo.
             if was != healthy {
                 if healthy {
                     tracing::info!("backend {} se recupero -> UP", backend.uri);
                 } else {
                     tracing::warn!("backend {} cayo -> DOWN", backend.uri);
                 }
+                // Avisamos al dashboard del cambio de salud.
+                events::emit(
+                    &events,
+                    Event::BackendHealth {
+                        backend: backend.uri.to_string(),
+                        healthy,
+                    },
+                );
             }
         }
 

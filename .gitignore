@@ -1,6 +1,13 @@
 # Artefactos de compilación de Rust
 /target
 
-# Lockfile: para binarios conviene comitearlo, pero lo dejamos fuera por ahora
+# Node / Next.js (dashboard)
+node_modules/
+web/.next/
+web/out/
+web/next-env.d.ts
+*.tsbuildinfo
+
+# Lockfile de Rust: para binarios conviene comitearlo, lo dejamos versionado.
 # (descomentá la línea de abajo si querés ignorarlo)
 # Cargo.lock

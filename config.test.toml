@@ -1,0 +1,18 @@
+listen = "127.0.0.1:8080"
+
+# Flaky PRIMERO: con el contador en 0, el primer intento cae en el flaky,
+# así forzamos el reintento hacia el backend bueno.
+[[upstreams]]
+url = "http://127.0.0.1:3003"
+
+[[upstreams]]
+url = "http://127.0.0.1:3001"
+
+[health_check]
+path = "/"
+interval_secs = 5
+timeout_secs = 2
+
+[proxy]
+request_timeout_secs = 2   # corto para que el test de /slow no tarde
+max_retries = 2
