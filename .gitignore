@@ -1,0 +1,6 @@
+# Artefactos de compilación de Rust
+/target
+
+# Lockfile: para binarios conviene comitearlo, pero lo dejamos fuera por ahora
+# (descomentá la línea de abajo si querés ignorarlo)
+# Cargo.lock

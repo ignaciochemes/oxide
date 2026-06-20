@@ -1,0 +1,29 @@
+[package]
+name = "oxide"
+version = "0.1.0"
+edition = "2021"
+description = "Un reverse proxy / load balancer HTTP escrito en Rust"
+license = "Apache-2.0"
+
+[dependencies]
+# Runtime asíncrono: maneja miles de conexiones concurrentes sin un thread por cada una
+tokio = { version = "1", features = ["full"] }
+# Librería HTTP de bajo nivel (servidor + cliente)
+hyper = { version = "1", features = ["full"] }
+# Utilidades que conectan hyper con tokio (cliente con pool, adaptadores de IO)
+hyper-util = { version = "0.1", features = ["full"] }
+# Helpers para construir y transformar bodies HTTP
+http-body-util = "0.1"
+bytes = "1"
+# Parseo de la configuración (config.toml -> structs de Rust)
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+# Logging estructurado
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# Manejo de errores ergonómico
+anyhow = "1"
+
+[profile.release]
+opt-level = 3
+lto = true

@@ -1,0 +1,20 @@
+# Configuración de Oxide
+#
+# "listen" es la dirección donde Oxide acepta las conexiones de los clientes.
+# Los clientes le pegan a Oxide, y Oxide reparte hacia los "upstreams".
+listen = "127.0.0.1:8080"
+
+# Cada [[upstreams]] es uno de tus microservicios (todos iguales en tu caso).
+# Oxide va a repartir las requests entre ellos con round-robin.
+[[upstreams]]
+url = "http://127.0.0.1:3001"
+
+[[upstreams]]
+url = "http://127.0.0.1:3002"
+
+# Chequeo de salud (opcional). Si borrás esta sección, se usan estos valores
+# por defecto. Oxide saca de la rotación a los backends que no respondan 2xx.
+[health_check]
+path = "/"          # a qué path se le hace GET para chequear
+interval_secs = 5   # cada cuántos segundos se chequea
+timeout_secs = 2    # cuánto esperar antes de darlo por caído
