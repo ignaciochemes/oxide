@@ -11,6 +11,10 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
 - Script de stress test con k6 (`scripts/k6-stress.js`) que carga los backends a
   través de Oxide, con rampa de VUs, thresholds y desglose por endpoint.
 
+- `docker-compose.server.yml` + `config.server.toml`: despliegue en un servidor
+  donde Oxide (con `network_mode: host`) balancea backends que ya corren en el
+  host (ej. microservicios en `127.0.0.1:300X`).
+
 ### Cambiado
 - El dashboard ahora detecta el host automáticamente (usa el mismo desde el que
   se abrió + puertos 9090/8080), así funciona en localhost y en un server remoto

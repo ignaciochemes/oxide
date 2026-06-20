@@ -1,0 +1,26 @@
+# Config de Oxide para un SERVIDOR donde los backends (ej. los microservicios
+# Express) ya corren en el host, publicados en 127.0.0.1:3001, 3002, ...
+#
+# Se usa con docker-compose.server.yml (Oxide con network_mode: host, así llega
+# a esos puertos del host directamente). Ajustá la lista de upstreams según
+# cuántas instancias hayas deployado.
+listen = "0.0.0.0:8080"
+
+[[upstreams]]
+url = "http://127.0.0.1:3001"
+[[upstreams]]
+url = "http://127.0.0.1:3002"
+[[upstreams]]
+url = "http://127.0.0.1:3003"
+[[upstreams]]
+url = "http://127.0.0.1:3004"
+[[upstreams]]
+url = "http://127.0.0.1:3005"
+
+[health_check]
+path = "/health"     # el microservicio Express expone /health
+interval_secs = 5
+timeout_secs = 2
+
+[admin]
+listen = "0.0.0.0:9090"

@@ -136,6 +136,15 @@ Levanta 3 microservicios de demo, Oxide y el dashboard, todo conectado. La
 config que usa está en [config.docker.toml](config.docker.toml). Para tu propio
 setup, montá tu `config.toml` sobre el contenedor `oxide`.
 
+**Balancear backends que ya corren en un servidor** (en vez de los mocks): usá
+[docker-compose.server.yml](docker-compose.server.yml) + [config.server.toml](config.server.toml).
+Oxide corre con `network_mode: host` y apunta a tus backends en
+`127.0.0.1:300X`:
+
+```bash
+docker compose -f docker-compose.server.yml up -d --build
+```
+
 ### Solo el proxy
 
 ```bash

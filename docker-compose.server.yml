@@ -1,0 +1,22 @@
+# Despliegue en un SERVIDOR donde Oxide balancea backends que ya corren en el
+# host (ej. los microservicios Express publicados en 127.0.0.1:3001..N).
+#
+#   docker compose -f docker-compose.server.yml up -d --build
+#
+# Usa network_mode: host (Linux) para que Oxide alcance esos puertos del host
+# directamente. Oxide queda en :8080 (proxy) y :9090 (admin/dashboard API);
+# el dashboard en :3000. La lista de backends se define en config.server.toml.
+services:
+  oxide:
+    build: .
+    network_mode: host
+    environment:
+      OXIDE_CONFIG: /app/config.server.toml
+    volumes:
+      - ./config.server.toml:/app/config.server.toml:ro
+    restart: unless-stopped
+
+  dashboard:
+    build: ./web
+    network_mode: host
+    restart: unless-stopped
