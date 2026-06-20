@@ -7,6 +7,25 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
 
 ## [Sin publicar]
 
+## [0.3.0] - 2026-06-20
+
+### Añadido
+- **Algoritmo least-connections** (`[balancer] algorithm = "least_connections"`):
+  elige el backend sano con menos requests en vuelo. Default sigue round-robin.
+- **Routing por host/path** (estilo Traefik): `[[routes]]` con `host` y/o
+  `path_prefix` mandan a su propio pool de backends; si nada matchea, va al pool
+  por defecto. Cada pool se balancea y chequea por separado.
+- **TLS / HTTPS** (`[tls]`): terminación TLS con rustls. Con `enabled = true` y
+  sin certificados, genera uno self-signed para desarrollo; o usá `cert_path` +
+  `key_path` (PEM) para producción.
+- Contador de **requests activas** por backend (visible en `/status` y dashboard).
+- `config.example.toml` con todas las opciones documentadas.
+
+### Cambiado
+- El proxy ahora rutea vía un `Router` (pool por defecto + reglas). El estado y
+  el WebSocket exponen la ruta y las activas de cada backend.
+- Graceful shutdown reimplementado por-conexión (compatible con TLS).
+
 ## [0.2.0] - 2026-06-20
 
 ### Añadido
@@ -58,6 +77,7 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
 - Logging estructurado con `tracing`, configurable vía `RUST_LOG`.
 - Script `scripts/toy-backend.js` para levantar backends de prueba.
 
-[Sin publicar]: https://github.com/ignaciochemes/oxide/compare/v0.2.0...HEAD
+[Sin publicar]: https://github.com/ignaciochemes/oxide/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/ignaciochemes/oxide/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/ignaciochemes/oxide/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ignaciochemes/oxide/releases/tag/v0.1.0

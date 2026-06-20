@@ -31,6 +31,9 @@ pub struct BackendInfo {
     pub url: String,
     pub healthy: bool,
     pub requests: u64,
+    pub active: u64,
+    /// Nombre del pool/ruta al que pertenece (ej. "default" o "api").
+    pub route: String,
 }
 
 /// Los eventos que viajan al dashboard. `#[serde(tag = "type")]` hace que cada
@@ -49,6 +52,8 @@ pub enum Event {
         method: String,
         path: String,
         backend: String,
+        /// Pool/ruta que atendió la request.
+        route: String,
         status: u16,
         ok: bool,
         attempts: u32,

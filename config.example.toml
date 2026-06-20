@@ -1,0 +1,82 @@
+# =============================================================================
+# Oxide — config de ejemplo con TODAS las opciones explicadas.
+# Copiá lo que necesites a tu config.toml. Casi todo es opcional: lo único
+# obligatorio es `listen` y al menos un `[[upstreams]]`.
+# =============================================================================
+
+# Dirección donde Oxide recibe el tráfico de los clientes.
+listen = "127.0.0.1:8080"
+
+# -----------------------------------------------------------------------------
+# Backends por defecto: tus microservicios. Oxide reparte la carga entre ellos.
+# Si no usás rutas (más abajo), TODO el tráfico va a este pool.
+# -----------------------------------------------------------------------------
+[[upstreams]]
+url = "http://127.0.0.1:3001"
+
+[[upstreams]]
+url = "http://127.0.0.1:3002"
+
+[[upstreams]]
+url = "http://127.0.0.1:3003"
+
+# -----------------------------------------------------------------------------
+# Algoritmo de balanceo (opcional). Por defecto "round_robin".
+#   round_robin       -> rota parejo. Ideal si tus backends son idénticos.
+#   least_connections -> manda al que tiene menos requests en curso. Mejor si
+#                        las requests duran distinto.
+# -----------------------------------------------------------------------------
+[balancer]
+algorithm = "round_robin"
+
+# -----------------------------------------------------------------------------
+# Routing por host/path (opcional, estilo Traefik). Cada [[routes]] manda a su
+# propio grupo de backends. Se evalúan EN ORDEN: gana la primera que matchea.
+# Si ninguna matchea, se usa el pool [[upstreams]] de arriba.
+# -----------------------------------------------------------------------------
+# Ejemplo: todo lo que empiece con /api va a otros dos servicios.
+# [[routes]]
+# name = "api"
+# path_prefix = "/api"
+# upstreams = ["http://127.0.0.1:4001", "http://127.0.0.1:4002"]
+#
+# Ejemplo: por dominio (header Host).
+# [[routes]]
+# name = "panel"
+# host = "admin.midominio.com"
+# upstreams = ["http://127.0.0.1:5001"]
+
+# -----------------------------------------------------------------------------
+# Health checks (opcional). Oxide saca de rotación los backends caídos y los
+# reincorpora cuando vuelven.
+# -----------------------------------------------------------------------------
+[health_check]
+path = "/"          # a qué path le hace GET para chequear
+interval_secs = 5   # cada cuánto chequea
+timeout_secs = 2    # cuánto espera antes de darlo por caído
+
+# -----------------------------------------------------------------------------
+# Reenvío (opcional): timeouts y reintentos.
+# -----------------------------------------------------------------------------
+[proxy]
+request_timeout_secs = 10        # corta si el backend tarda más que esto (504)
+max_retries = 2                  # reintentos en otro backend (solo idempotentes)
+status_path = "/_oxide/status"   # GET acá devuelve el estado en JSON
+
+# -----------------------------------------------------------------------------
+# Dashboard / admin (opcional). Expone el estado y el WebSocket en vivo.
+# -----------------------------------------------------------------------------
+[admin]
+listen = "127.0.0.1:9090"
+
+# -----------------------------------------------------------------------------
+# TLS / HTTPS (opcional, desactivado por defecto). Lo más fácil: poné
+# enabled = true y, sin más, Oxide genera un certificado self-signed para dev.
+# Para producción, pasá tu certificado real con cert_path + key_path (PEM).
+# -----------------------------------------------------------------------------
+[tls]
+enabled = false
+# self_signed = true                     # forzar cert auto-generado (dev)
+# hostnames = ["localhost", "127.0.0.1"] # nombres del cert self-signed
+# cert_path = "./certs/fullchain.pem"    # cert real (producción)
+# key_path  = "./certs/privkey.pem"

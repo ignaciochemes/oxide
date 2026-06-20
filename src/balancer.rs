@@ -1,57 +1,72 @@
 //! El load balancer en sí.
 //!
-//! Implementa **round-robin** salteando los backends caídos: a cada request le
-//! toca el siguiente backend *sano* en orden, rotando en círculo.
+//! Soporta dos algoritmos (configurables en `[balancer]`):
+//!   - **round-robin**: rota en círculo entre los backends sanos. Parejo.
+//!   - **least-connections**: elige el backend sano con menos requests activas.
 //!
-//! El estado de salud de cada backend vive en un `AtomicBool` dentro de un
-//! `Arc<Backend>`. ¿Por qué así? Porque dos partes del programa miran/escriben
-//! ese estado al mismo tiempo:
-//!   - el `proxy` lo *lee* para decidir si usa el backend,
-//!   - el `health` checker lo *escribe* según los chequeos.
-//! El `Arc` hace que ambos compartan EXACTAMENTE el mismo `Backend` (mismo
-//! atomic), y el atomic permite leerlo/escribirlo sin `Mutex`.
+//! En ambos casos saltea los backends caídos. El estado de cada backend
+//! (salud, requests totales, requests activas) vive en atomics dentro de un
+//! `Arc<Backend>`, compartido entre el proxy y el health checker sin locks.
 
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use hyper::Uri;
 
-/// Un backend: su URL, si está sano, y cuántas requests le tocaron.
+use crate::config::Algorithm;
+
+/// Un backend: su URL, salud, requests totales y requests activas (en vuelo).
 #[derive(Debug)]
 pub struct Backend {
     pub uri: Uri,
     healthy: AtomicBool,
     requests: AtomicU64,
+    active: AtomicU64,
 }
 
 impl Backend {
-    /// ¿Está sano ahora mismo?
     pub fn is_healthy(&self) -> bool {
         self.healthy.load(Ordering::Relaxed)
     }
 
-    /// Marca el backend como sano (`true`) o caído (`false`).
     pub fn set_healthy(&self, value: bool) {
         self.healthy.store(value, Ordering::Relaxed);
     }
 
-    /// Cuántas requests se le rutearon hasta ahora (para el endpoint de estado).
+    /// Requests totales ruteadas a este backend (acumulado).
     pub fn request_count(&self) -> u64 {
         self.requests.load(Ordering::Relaxed)
     }
+
+    /// Requests en vuelo ahora mismo (las que todavía están siendo atendidas).
+    pub fn active(&self) -> u64 {
+        self.active.load(Ordering::Relaxed)
+    }
+
+    /// Marca el inicio de una request hacia este backend.
+    pub fn inc_active(&self) {
+        self.active.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Marca el fin de una request hacia este backend.
+    pub fn dec_active(&self) {
+        self.active.fetch_sub(1, Ordering::Relaxed);
+    }
 }
 
-/// Load balancer round-robin, seguro para usar desde múltiples tasks a la vez.
+/// Load balancer: un pool de backends + el algoritmo para elegir entre ellos.
 #[derive(Debug)]
 pub struct Balancer {
+    name: String,
     backends: Vec<Arc<Backend>>,
+    algorithm: Algorithm,
     next: AtomicUsize,
 }
 
 impl Balancer {
-    /// Construye el balancer a partir de las URLs de la config.
-    /// Arrancan todos como "sanos"; el health checker corrige enseguida.
-    pub fn new(urls: Vec<String>) -> anyhow::Result<Self> {
+    /// Construye el balancer con un nombre (para logs/dashboard), las URLs y el
+    /// algoritmo. Arrancan todos "sanos"; el health checker corrige enseguida.
+    pub fn new(name: impl Into<String>, urls: Vec<String>, algorithm: Algorithm) -> anyhow::Result<Self> {
         let mut backends = Vec::new();
         for url in urls {
             let uri: Uri = url
@@ -61,41 +76,65 @@ impl Balancer {
                 uri,
                 healthy: AtomicBool::new(true),
                 requests: AtomicU64::new(0),
+                active: AtomicU64::new(0),
             }));
         }
 
         Ok(Self {
+            name: name.into(),
             backends,
+            algorithm,
             next: AtomicUsize::new(0),
         })
     }
 
-    /// Elige el próximo backend **sano** de forma rotativa.
-    ///
-    /// Devuelve `None` si están TODOS caídos (en ese caso el proxy responde 503).
-    /// Probamos hasta `len` posiciones desde el contador: así, si el siguiente
-    /// en la rueda está caído, saltamos al que sigue en vez de fallar.
-    pub fn next_backend(&self) -> Option<Arc<Backend>> {
-        let n = self.backends.len();
-        for _ in 0..n {
-            let i = self.next.fetch_add(1, Ordering::Relaxed) % n;
-            let backend = &self.backends[i];
-            if backend.is_healthy() {
-                // Contamos la request ruteada a este backend.
-                backend.requests.fetch_add(1, Ordering::Relaxed);
-                // Clonar el Arc es barato: solo suma 1 al contador de referencias.
-                return Some(backend.clone());
-            }
-        }
-        None
+    pub fn name(&self) -> &str {
+        &self.name
     }
 
-    /// Da acceso a los backends (lo usa el health checker para actualizarlos).
+    /// Elige el próximo backend **sano** según el algoritmo configurado.
+    /// Devuelve `None` si están todos caídos.
+    pub fn next_backend(&self) -> Option<Arc<Backend>> {
+        // Índices de los backends sanos.
+        let healthy: Vec<usize> = (0..self.backends.len())
+            .filter(|&i| self.backends[i].is_healthy())
+            .collect();
+        if healthy.is_empty() {
+            return None;
+        }
+
+        let idx = match self.algorithm {
+            Algorithm::RoundRobin => {
+                // Rotamos en círculo solo entre los sanos.
+                let i = self.next.fetch_add(1, Ordering::Relaxed);
+                healthy[i % healthy.len()]
+            }
+            Algorithm::LeastConnections => {
+                // Mínimo de activas entre los sanos; si empatan, rotamos.
+                let min = healthy
+                    .iter()
+                    .map(|&i| self.backends[i].active())
+                    .min()
+                    .unwrap();
+                let candidates: Vec<usize> = healthy
+                    .into_iter()
+                    .filter(|&i| self.backends[i].active() == min)
+                    .collect();
+                let i = self.next.fetch_add(1, Ordering::Relaxed);
+                candidates[i % candidates.len()]
+            }
+        };
+
+        let backend = &self.backends[idx];
+        backend.requests.fetch_add(1, Ordering::Relaxed);
+        Some(backend.clone())
+    }
+
+    /// Acceso a los backends (lo usan el health checker y el snapshot).
     pub fn backends(&self) -> &[Arc<Backend>] {
         &self.backends
     }
 
-    /// Lista de upstreams como texto (para logs).
     pub fn upstream_list(&self) -> Vec<String> {
         self.backends.iter().map(|b| b.uri.to_string()).collect()
     }

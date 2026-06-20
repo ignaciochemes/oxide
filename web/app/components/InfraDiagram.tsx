@@ -130,17 +130,20 @@ export default function InfraDiagram({
           <rect
             className={`node-backend ${b.healthy ? "up" : "down"}`}
             x={x - 16}
-            y={y - 34}
-            width={150}
-            height={68}
+            y={y - 38}
+            width={158}
+            height={76}
             rx={12}
           />
-          <circle className={`dot ${b.healthy ? "up" : "down"}`} cx={x} cy={y - 12} r={6} />
-          <text className="be-name" x={x + 18} y={y - 7}>
+          <circle className={`dot ${b.healthy ? "up" : "down"}`} cx={x} cy={y - 18} r={6} />
+          <text className="be-name" x={x + 18} y={y - 13}>
             {shortName(b.url)}
           </text>
-          <text className="be-count" x={x + 18} y={y + 17}>
-            {b.requests} reqs
+          <text className="be-route" x={x + 18} y={y + 4}>
+            ruta: {b.route}
+          </text>
+          <text className="be-count" x={x + 18} y={y + 22}>
+            {b.requests} reqs · {b.active} activas
           </text>
         </g>
       ))}

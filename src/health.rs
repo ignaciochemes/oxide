@@ -15,12 +15,13 @@ use hyper_util::client::legacy::connect::HttpConnector;
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
 
-use crate::balancer::Balancer;
 use crate::config::HealthCheck;
 use crate::events::{self, Event, EventTx};
+use crate::router::Router;
 
 /// Bucle infinito de chequeos. Se lanza una sola vez desde `main`.
-pub async fn run(balancer: Arc<Balancer>, cfg: HealthCheck, events: EventTx) {
+/// Chequea TODOS los pools del router (default + cada ruta).
+pub async fn run(router: Arc<Router>, cfg: HealthCheck, events: EventTx) {
     // Cliente propio del health checker. Manda requests con body vacío
     // (`Empty<Bytes>`), por eso no podemos reusar el cliente del proxy, que
     // está tipado para reenviar el body entrante (`Incoming`).
@@ -38,13 +39,15 @@ pub async fn run(balancer: Arc<Balancer>, cfg: HealthCheck, events: EventTx) {
     );
 
     loop {
-        for backend in balancer.backends() {
-            let healthy = check_one(&client, &backend.uri, &cfg.path, timeout).await;
-            let was = backend.is_healthy();
-            backend.set_healthy(healthy);
+        // Recorremos todos los pools y, dentro de cada uno, todos sus backends.
+        for balancer in router.balancers() {
+            for backend in balancer.backends() {
+                let healthy = check_one(&client, &backend.uri, &cfg.path, timeout).await;
+                let was = backend.is_healthy();
+                backend.set_healthy(healthy);
 
-            // Solo actuamos en los cambios de estado, no en cada chequeo.
-            if was != healthy {
+                // Solo actuamos en los cambios de estado, no en cada chequeo.
+                if was != healthy {
                 if healthy {
                     tracing::info!("backend {} se recupero -> UP", backend.uri);
                 } else {
@@ -57,7 +60,8 @@ pub async fn run(balancer: Arc<Balancer>, cfg: HealthCheck, events: EventTx) {
                         backend: backend.uri.to_string(),
                         healthy,
                     },
-                );
+                    );
+                }
             }
         }
 

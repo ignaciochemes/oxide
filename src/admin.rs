@@ -23,13 +23,14 @@ use tokio::net::TcpListener;
 use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::watch;
 
-use crate::balancer::Balancer;
-use crate::events::{BackendInfo, Event, EventTx};
+use crate::events::{Event, EventTx};
+use crate::proxy::snapshot_backends;
+use crate::router::Router;
 
 /// Levanta el servidor admin y atiende hasta que llega la señal de shutdown.
 pub async fn run(
     addr: SocketAddr,
-    balancer: Arc<Balancer>,
+    router: Arc<Router>,
     events: EventTx,
     mut shutdown: watch::Receiver<bool>,
 ) -> anyhow::Result<()> {
@@ -41,12 +42,12 @@ pub async fn run(
             accepted = listener.accept() => {
                 let (stream, _peer) = accepted?;
                 let io = TokioIo::new(stream);
-                let balancer = balancer.clone();
+                let router = router.clone();
                 let events = events.clone();
 
                 tokio::spawn(async move {
                     let service = service_fn(move |req| {
-                        handle(req, balancer.clone(), events.clone())
+                        handle(req, router.clone(), events.clone())
                     });
                     // `.with_upgrades()` es indispensable para que funcione el
                     // handshake de WebSocket (que "actualiza" la conexión HTTP).
@@ -71,7 +72,7 @@ pub async fn run(
 /// Rutea las requests del admin: WebSocket, status o 404.
 async fn handle(
     mut req: Request<Incoming>,
-    balancer: Arc<Balancer>,
+    router: Arc<Router>,
     events: EventTx,
 ) -> Result<Response<Full<Bytes>>, Infallible> {
     let path = req.uri().path().to_string();
@@ -82,7 +83,7 @@ async fn handle(
             Ok((response, websocket)) => {
                 let rx = events.subscribe();
                 // La conexión WS se atiende en su propia task.
-                tokio::spawn(serve_ws(websocket, balancer, rx));
+                tokio::spawn(serve_ws(websocket, router, rx));
                 return Ok(response);
             }
             Err(err) => {
@@ -96,7 +97,7 @@ async fn handle(
 
     // Snapshot en JSON (para chequeos rápidos o si el front prefiere fetch).
     if path == "/status" {
-        let json = serde_json::to_string(&snapshot(&balancer)).unwrap_or_else(|_| "{}".to_string());
+        let json = serde_json::to_string(&snapshot(&router)).unwrap_or_else(|_| "{}".to_string());
         let mut resp = Response::new(Full::new(Bytes::from(json)));
         let headers = resp.headers_mut();
         headers.insert("content-type", "application/json".parse().unwrap());
@@ -111,7 +112,7 @@ async fn handle(
 /// cada evento del bus hasta que el cliente se desconecta.
 async fn serve_ws(
     websocket: hyper_tungstenite::HyperWebsocket,
-    balancer: Arc<Balancer>,
+    router: Arc<Router>,
     mut rx: tokio::sync::broadcast::Receiver<Event>,
 ) {
     let ws = match websocket.await {
@@ -126,7 +127,7 @@ async fn serve_ws(
     let (mut sink, mut stream) = ws.split();
 
     // 1) Snapshot inicial: el dashboard arranca mostrando el estado actual.
-    if let Ok(txt) = serde_json::to_string(&snapshot(&balancer)) {
+    if let Ok(txt) = serde_json::to_string(&snapshot(&router)) {
         if sink.send(Message::Text(txt.into())).await.is_err() {
             return;
         }
@@ -157,20 +158,10 @@ async fn serve_ws(
     }
 }
 
-/// Arma el evento `Snapshot` con el estado actual de todos los backends.
-fn snapshot(balancer: &Balancer) -> Event {
-    let backends: Vec<BackendInfo> = balancer
-        .backends()
-        .iter()
-        .map(|b| BackendInfo {
-            url: b.uri.to_string(),
-            healthy: b.is_healthy(),
-            requests: b.request_count(),
-        })
-        .collect();
-
-    let total_requests = balancer.backends().iter().map(|b| b.request_count()).sum();
-
+/// Arma el evento `Snapshot` con el estado actual de TODOS los pools/backends.
+fn snapshot(router: &Router) -> Event {
+    let backends = snapshot_backends(router);
+    let total_requests = backends.iter().map(|b| b.requests).sum();
     Event::Snapshot {
         backends,
         total_requests,

@@ -8,6 +8,11 @@ idénticos (estilo nginx / Traefik, pero propio y mínimo).
 
 - Proxy HTTP a nivel **L7** (entiende HTTP).
 - Balanceo **round-robin** entre N backends.
+- **Algoritmos de balanceo**: round-robin o least-connections.
+- **Routing por host/path** (estilo Traefik): reglas que mandan a distintos
+  pools de backends según el dominio o el prefijo de la URL.
+- **TLS / HTTPS**: terminación TLS; cert self-signed automático para dev o tu
+  cert real para producción.
 - **Health checks**: saca de la rotación los backends caídos y los reincorpora
   solos cuando se recuperan.
 - **Timeouts y reintentos**: corta requests lentas (`504`) y reintenta en otro
@@ -42,11 +47,16 @@ client ─┤  Oxide  ├──┬────▶│ backend :3001    │
 | `src/main.rs`      | Arranque: config, health checker, admin, proxy, shutdown   |
 | `src/config.rs`    | Lee y valida `config.toml`                                  |
 | `src/balancer.rs`  | Elige el próximo backend **sano** (round-robin) + contadores |
+| `src/router.rs`    | Routing por host/path → pool de backends                   |
 | `src/health.rs`    | Task de fondo que chequea la salud de cada backend         |
 | `src/proxy.rs`     | Reenvía la request al backend y devuelve la respuesta      |
+| `src/tls.rs`       | Terminación TLS (cert self-signed o PEM)                   |
 | `src/events.rs`    | Bus de eventos (`broadcast`) para el dashboard             |
 | `src/admin.rs`     | Servidor admin: `/status` y WebSocket `/ws`                |
 | `web/`             | Dashboard en vivo (Next.js + WebSocket)                    |
+
+Todas las opciones de configuración están documentadas en
+[config.example.toml](config.example.toml).
 
 ## Configuración
 
@@ -148,7 +158,8 @@ Próximos pasos pensados de menor a mayor dificultad:
 2. ✅ ~~**Timeouts y reintentos** — no colgarse si un backend tarda.~~ (hecho)
 3. ✅ ~~**Dashboard en vivo** — WebSocket + Next.js.~~ (hecho)
 4. ✅ ~~**Graceful shutdown** — cierre ordenado con Ctrl+C.~~ (hecho)
-5. **Algoritmos** — least-connections, weighted round-robin.
-6. **Routing** — elegir backend según host o path (como Traefik).
-7. **HTTPS** — terminación TLS con `rustls`.
-8. **Recarga de config** — sin reiniciar el proceso.
+5. ✅ ~~**Algoritmos** — least-connections.~~ (hecho)
+6. ✅ ~~**Routing** — host/path estilo Traefik.~~ (hecho)
+7. ✅ ~~**HTTPS** — terminación TLS con `rustls`.~~ (hecho)
+8. **Weighted round-robin** — repartir según pesos por backend.
+9. **Recarga de config** — sin reiniciar el proceso.

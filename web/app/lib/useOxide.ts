@@ -4,7 +4,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 // --- Tipos de los eventos que manda Oxide por WebSocket ---
 
-export type BackendInfo = { url: string; healthy: boolean; requests: number };
+export type BackendInfo = {
+  url: string;
+  healthy: boolean;
+  requests: number;
+  active: number;
+  route: string;
+};
 
 export type SnapshotEvent = {
   type: "snapshot";
@@ -18,6 +24,7 @@ export type RequestEvent = {
   method: string;
   path: string;
   backend: string;
+  route: string;
   status: number;
   ok: boolean;
   attempts: number;
@@ -126,7 +133,7 @@ export function useOxide(): OxideState {
           setPulses((p) => [...p.slice(-60), { id: pid, backend: ev.backend, ok: ev.ok }]);
 
           const retries = ev.attempts > 1 ? ` · ${ev.attempts} intentos` : "";
-          const text = `${ev.method} ${ev.path} → ${shortName(ev.backend)} · ${ev.status} · ${ev.duration_ms}ms${retries}`;
+          const text = `[${ev.route}] ${ev.method} ${ev.path} → ${shortName(ev.backend)} · ${ev.status} · ${ev.duration_ms}ms${retries}`;
           pushLog(setLogs, ++seq.current, "request", ev.ok, text);
           return;
         }
