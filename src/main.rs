@@ -52,11 +52,12 @@ async fn main() -> anyhow::Result<()> {
         .listen
         .parse()
         .with_context(|| format!("dirección de 'listen' inválida: {}", config.listen))?;
-    let admin_addr: SocketAddr = config
-        .admin
-        .listen
-        .parse()
-        .with_context(|| format!("dirección de 'admin.listen' inválida: {}", config.admin.listen))?;
+    let admin_addr: SocketAddr = config.admin.listen.parse().with_context(|| {
+        format!(
+            "dirección de 'admin.listen' inválida: {}",
+            config.admin.listen
+        )
+    })?;
 
     // Router detrás de un ArcSwap: la recarga en caliente lo reemplaza sin frenar
     // las requests en curso.
@@ -71,7 +72,11 @@ async fn main() -> anyhow::Result<()> {
     } else {
         None
     };
-    let scheme = if tls_acceptor.is_some() { "https" } else { "http" };
+    let scheme = if tls_acceptor.is_some() {
+        "https"
+    } else {
+        "http"
+    };
 
     let events = events::channel(512);
 
@@ -106,8 +111,15 @@ async fn main() -> anyhow::Result<()> {
         let admin_config_path = config_path.clone();
         let token = config.admin.token.clone();
         tokio::spawn(async move {
-            if let Err(err) =
-                admin::run(admin_addr, router, events, admin_config_path, token, shutdown_rx).await
+            if let Err(err) = admin::run(
+                admin_addr,
+                router,
+                events,
+                admin_config_path,
+                token,
+                shutdown_rx,
+            )
+            .await
             {
                 tracing::error!("el servidor admin falló: {err:?}");
             }
@@ -203,7 +215,10 @@ fn build_router(config: &Config) -> anyhow::Result<Router> {
 
     let mut routes = Vec::new();
     for (i, rc) in config.routes.iter().enumerate() {
-        let name = rc.name.clone().unwrap_or_else(|| format!("route-{}", i + 1));
+        let name = rc
+            .name
+            .clone()
+            .unwrap_or_else(|| format!("route-{}", i + 1));
         // Las rutas usan peso 1 por backend (el peso se configura en el pool default).
         let targets: Vec<(String, u32)> = rc.upstreams.iter().map(|u| (u.clone(), 1)).collect();
         let balancer = Arc::new(Balancer::new(name.clone(), targets, algorithm)?);

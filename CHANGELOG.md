@@ -7,6 +7,18 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
 
 ## [Sin publicar]
 
+## [0.5.0] - 2026-06-20
+
+### Añadido
+- **Tests** unitarios (balanceo round-robin/weighted/least-connections, salud,
+  routing host/path, edición de config) — 12 tests.
+- **CI** (GitHub Actions): formato, clippy estricto, tests y build (Rust) +
+  build del dashboard.
+- **Docker**: `Dockerfile` (proxy), `web/Dockerfile` (dashboard) y
+  `docker-compose.yml` con demo completa (3 microservicios + Oxide + dashboard).
+- **Release** automatizado: binarios para Linux/macOS/Windows al taguear `vX.Y.Z`.
+- `CONTRIBUTING.md`, badges y quickstart de 30s en el README.
+
 ## [0.4.0] - 2026-06-20
 
 ### Añadido
@@ -103,7 +115,8 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
 - Logging estructurado con `tracing`, configurable vía `RUST_LOG`.
 - Script `scripts/toy-backend.js` para levantar backends de prueba.
 
-[Sin publicar]: https://github.com/ignaciochemes/oxide/compare/v0.4.0...HEAD
+[Sin publicar]: https://github.com/ignaciochemes/oxide/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/ignaciochemes/oxide/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/ignaciochemes/oxide/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/ignaciochemes/oxide/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/ignaciochemes/oxide/compare/v0.1.0...v0.2.0

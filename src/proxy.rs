@@ -86,8 +86,17 @@ pub async fn handle(
             None => {
                 tracing::error!("ruta '{route_name}': no hay backends sanos");
                 emit_request(
-                    &events, id, &method, &path, "(sin backend)", &route_name, 503, false,
-                    attempt, start.elapsed(), &client_addr,
+                    &events,
+                    id,
+                    &method,
+                    &path,
+                    "(sin backend)",
+                    &route_name,
+                    503,
+                    false,
+                    attempt,
+                    start.elapsed(),
+                    &client_addr,
                 );
                 return Ok(error_response(
                     StatusCode::SERVICE_UNAVAILABLE,
@@ -131,14 +140,26 @@ pub async fn handle(
             Ok(Ok(resp)) => {
                 let status = resp.status().as_u16();
                 emit_request(
-                    &events, id, &method, &path, &backend.uri.to_string(), &route_name,
-                    status, true, attempt, start.elapsed(), &client_addr,
+                    &events,
+                    id,
+                    &method,
+                    &path,
+                    &backend.uri.to_string(),
+                    &route_name,
+                    status,
+                    true,
+                    attempt,
+                    start.elapsed(),
+                    &client_addr,
                 );
                 let (resp_parts, resp_body) = resp.into_parts();
                 return Ok(Response::from_parts(resp_parts, resp_body.boxed()));
             }
             Ok(Err(err)) => {
-                tracing::warn!("backend {} falló (intento {attempt}/{max_attempts}): {err}", backend.uri);
+                tracing::warn!(
+                    "backend {} falló (intento {attempt}/{max_attempts}): {err}",
+                    backend.uri
+                );
                 last_status = StatusCode::BAD_GATEWAY;
                 last_backend = backend.uri.to_string();
             }
@@ -156,8 +177,17 @@ pub async fn handle(
 
     tracing::error!("ruta '{route_name}': todos los intentos fallaron para {path_and_query}");
     emit_request(
-        &events, id, &method, &path, &last_backend, &route_name, last_status.as_u16(),
-        false, max_attempts, start.elapsed(), &client_addr,
+        &events,
+        id,
+        &method,
+        &path,
+        &last_backend,
+        &route_name,
+        last_status.as_u16(),
+        false,
+        max_attempts,
+        start.elapsed(),
+        &client_addr,
     );
     Ok(error_response(last_status, "backend no disponible"))
 }
@@ -204,7 +234,9 @@ fn status_response(router: &Router) -> Response<ProxyBody> {
         "backends": backends,
     });
     let text = serde_json::to_string_pretty(&payload).unwrap_or_else(|_| "{}".to_string());
-    let body = Full::new(Bytes::from(text)).map_err(|never| match never {}).boxed();
+    let body = Full::new(Bytes::from(text))
+        .map_err(|never| match never {})
+        .boxed();
     Response::builder()
         .status(StatusCode::OK)
         .header("content-type", "application/json")

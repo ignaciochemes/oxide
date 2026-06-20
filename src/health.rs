@@ -49,18 +49,18 @@ pub async fn run(router: SharedRouter, cfg: HealthCheck, events: EventTx) {
 
                 // Solo actuamos en los cambios de estado, no en cada chequeo.
                 if was != healthy {
-                if healthy {
-                    tracing::info!("backend {} se recupero -> UP", backend.uri);
-                } else {
-                    tracing::warn!("backend {} cayo -> DOWN", backend.uri);
-                }
-                // Avisamos al dashboard del cambio de salud.
-                events::emit(
-                    &events,
-                    Event::BackendHealth {
-                        backend: backend.uri.to_string(),
-                        healthy,
-                    },
+                    if healthy {
+                        tracing::info!("backend {} se recupero -> UP", backend.uri);
+                    } else {
+                        tracing::warn!("backend {} cayo -> DOWN", backend.uri);
+                    }
+                    // Avisamos al dashboard del cambio de salud.
+                    events::emit(
+                        &events,
+                        Event::BackendHealth {
+                            backend: backend.uri.to_string(),
+                            healthy,
+                        },
                     );
                 }
             }

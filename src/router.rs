@@ -81,3 +81,57 @@ impl Router {
         all
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Algorithm;
+
+    fn bal(name: &str) -> Arc<Balancer> {
+        Arc::new(
+            Balancer::new(
+                name,
+                vec![("http://127.0.0.1:1".into(), 1)],
+                Algorithm::RoundRobin,
+            )
+            .unwrap(),
+        )
+    }
+
+    #[test]
+    fn matcher_combina_host_y_path() {
+        let m = Matcher {
+            host: Some("a.com".into()),
+            path_prefix: Some("/api".into()),
+        };
+        assert!(m.matches(Some("a.com"), "/api/users"));
+        assert!(!m.matches(Some("b.com"), "/api/users"));
+        assert!(!m.matches(Some("a.com"), "/web"));
+        assert!(!m.matches(None, "/api/users"));
+    }
+
+    #[test]
+    fn matcher_vacio_matchea_todo() {
+        let m = Matcher {
+            host: None,
+            path_prefix: None,
+        };
+        assert!(m.matches(None, "/cualquier/cosa"));
+    }
+
+    #[test]
+    fn select_usa_la_primera_o_el_default() {
+        let router = Router::new(
+            bal("default"),
+            vec![Route {
+                matcher: Matcher {
+                    host: None,
+                    path_prefix: Some("/api".into()),
+                },
+                balancer: bal("api"),
+            }],
+        );
+        assert_eq!(router.select(None, "/api/x").name(), "api");
+        assert_eq!(router.select(None, "/otro").name(), "default");
+    }
+}

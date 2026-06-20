@@ -7,6 +7,7 @@
 const http = require("http");
 
 const PORT = Number(process.argv[2] || 3001);
+const HOST = process.env.HOST || "127.0.0.1"; // en Docker se usa 0.0.0.0
 const INSTANCE = `svc-${PORT}`;
 const ERROR_RATE = Number(process.env.ERROR_RATE || 0);
 
@@ -62,6 +63,6 @@ const server = http.createServer((req, res) => {
   }, latency);
 });
 
-server.listen(PORT, "127.0.0.1", () => {
-  console.log(`[${INSTANCE}] microservicio escuchando en http://127.0.0.1:${PORT}  (error_rate=${ERROR_RATE})`);
+server.listen(PORT, HOST, () => {
+  console.log(`[${INSTANCE}] microservicio escuchando en http://${HOST}:${PORT}  (error_rate=${ERROR_RATE})`);
 });

@@ -146,7 +146,10 @@ impl Balancer {
                 // Smooth weighted round-robin (algoritmo de nginx). Reparte
                 // según el peso pero sin ráfagas: intercala los backends.
                 let _guard = self.wrr_lock.lock().unwrap();
-                let total: i64 = healthy.iter().map(|&i| self.backends[i].weight as i64).sum();
+                let total: i64 = healthy
+                    .iter()
+                    .map(|&i| self.backends[i].weight as i64)
+                    .sum();
                 let mut best = healthy[0];
                 let mut best_cw = i64::MIN;
                 for &i in &healthy {
@@ -173,5 +176,80 @@ impl Balancer {
     /// Acceso a los backends (lo usan el health checker y el snapshot).
     pub fn backends(&self) -> &[Arc<Backend>] {
         &self.backends
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Algorithm;
+
+    fn build(algo: Algorithm, targets: &[(&str, u32)]) -> Balancer {
+        let t = targets.iter().map(|(u, w)| (u.to_string(), *w)).collect();
+        Balancer::new("test", t, algo).unwrap()
+    }
+
+    fn pick(b: &Balancer) -> String {
+        b.next_backend().unwrap().uri.to_string()
+    }
+
+    #[test]
+    fn round_robin_alterna() {
+        let b = build(
+            Algorithm::RoundRobin,
+            &[("http://127.0.0.1:1", 1), ("http://127.0.0.1:2", 1)],
+        );
+        let p: Vec<_> = (0..4).map(|_| pick(&b)).collect();
+        assert_eq!(p[0], p[2]);
+        assert_eq!(p[1], p[3]);
+        assert_ne!(p[0], p[1]);
+    }
+
+    #[test]
+    fn saltea_los_caidos() {
+        let b = build(
+            Algorithm::RoundRobin,
+            &[("http://127.0.0.1:1", 1), ("http://127.0.0.1:2", 1)],
+        );
+        b.backends()[0].set_healthy(false);
+        for _ in 0..5 {
+            assert_eq!(pick(&b), "http://127.0.0.1:2/");
+        }
+    }
+
+    #[test]
+    fn none_si_todos_caidos() {
+        let b = build(Algorithm::RoundRobin, &[("http://127.0.0.1:1", 1)]);
+        b.backends()[0].set_healthy(false);
+        assert!(b.next_backend().is_none());
+    }
+
+    #[test]
+    fn weighted_respeta_la_proporcion() {
+        let b = build(
+            Algorithm::Weighted,
+            &[("http://127.0.0.1:1", 3), ("http://127.0.0.1:2", 1)],
+        );
+        let mut a = 0;
+        let mut c = 0;
+        for _ in 0..8 {
+            if pick(&b) == "http://127.0.0.1:1/" {
+                a += 1;
+            } else {
+                c += 1;
+            }
+        }
+        assert_eq!((a, c), (6, 2));
+    }
+
+    #[test]
+    fn least_connections_elige_el_menos_ocupado() {
+        let b = build(
+            Algorithm::LeastConnections,
+            &[("http://127.0.0.1:1", 1), ("http://127.0.0.1:2", 1)],
+        );
+        b.backends()[0].inc_active();
+        b.backends()[0].inc_active();
+        assert_eq!(pick(&b), "http://127.0.0.1:2/");
     }
 }

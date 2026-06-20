@@ -1,0 +1,36 @@
+# Demo completa con Docker: 3 microservicios + Oxide + dashboard.
+#   docker compose up --build
+# Después abrí http://localhost:3000
+services:
+  svc1:
+    image: node:22-slim
+    command: node /scripts/mock-backend.js 3001
+    environment: { HOST: "0.0.0.0" }
+    volumes: ["./scripts:/scripts:ro"]
+
+  svc2:
+    image: node:22-slim
+    command: node /scripts/mock-backend.js 3002
+    environment: { HOST: "0.0.0.0" }
+    volumes: ["./scripts:/scripts:ro"]
+
+  svc3:
+    image: node:22-slim
+    command: node /scripts/mock-backend.js 3003
+    environment: { HOST: "0.0.0.0" }
+    volumes: ["./scripts:/scripts:ro"]
+
+  oxide:
+    build: .
+    environment: { OXIDE_CONFIG: "/app/config.docker.toml" }
+    volumes: ["./config.docker.toml:/app/config.docker.toml:ro"]
+    ports:
+      - "8080:8080" # proxy
+      - "9090:9090" # admin / dashboard API + WebSocket
+    depends_on: [svc1, svc2, svc3]
+
+  dashboard:
+    build: ./web
+    ports:
+      - "3000:3000"
+    depends_on: [oxide]

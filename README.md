@@ -1,10 +1,28 @@
-# Oxide
+# Oxide 🦀
 
-Un **reverse proxy / load balancer** HTTP escrito en Rust, hecho para aprender y
-para resolver un problema real: repartir la carga entre varios microservicios
-idénticos (estilo nginx / Traefik, pero propio y mínimo).
+[![CI](https://github.com/ignaciochemes/oxide/actions/workflows/ci.yml/badge.svg)](https://github.com/ignaciochemes/oxide/actions/workflows/ci.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-## Estado actual (v0.1)
+Un **reverse proxy / load balancer** HTTP en Rust, pensado para ser **fácil de
+usar y configurar** — con un dashboard en vivo donde repartís la carga entre tus
+microservicios sin pelearte con archivos de config (estilo nginx / Traefik, pero
+mínimo y amigable).
+
+## Empezar en 30 segundos
+
+```bash
+git clone https://github.com/ignaciochemes/oxide && cd oxide
+
+# Opción A: con Docker (3 microservicios de demo + Oxide + dashboard)
+docker compose up --build
+
+# Opción B: local (necesitás Rust y Bun)
+bun install && bun run setup && bun run demo
+```
+
+Abrí **http://localhost:3000** y mirá el tráfico repartirse en vivo. 🎈
+
+## Estado actual
 
 - Proxy HTTP a nivel **L7** (entiende HTTP).
 - Balanceo **round-robin** entre N backends.
@@ -108,6 +126,16 @@ bun run dev            # solo Oxide (proxy :8080 / admin :9090) + dashboard :300
 
 Después abrí el dashboard en http://localhost:3000.
 
+### Con Docker
+
+```bash
+docker compose up --build
+```
+
+Levanta 3 microservicios de demo, Oxide y el dashboard, todo conectado. La
+config que usa está en [config.docker.toml](config.docker.toml). Para tu propio
+setup, montá tu `config.toml` sobre el contenedor `oxide`.
+
 ### Solo el proxy
 
 ```bash
@@ -171,7 +199,7 @@ Próximos pasos pensados de menor a mayor dificultad:
 9. ✅ ~~**Recarga de config** — sin reiniciar el proceso.~~ (hecho)
 
 Dashboard (hecho): panel de control para editar todo desde la UI, métricas en
-vivo y onboarding amigable.
+vivo y onboarding amigable. OSS-ready (hecho): tests, CI, Docker y releases.
 
-Ideas a futuro: empaquetado OSS (tests, CI, Docker, binarios), métricas
-Prometheus (`/metrics`), rate limiting, sticky sessions, caché de respuestas.
+Ideas a futuro: métricas Prometheus (`/metrics`), rate limiting, sticky
+sessions, caché de respuestas.

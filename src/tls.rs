@@ -35,7 +35,9 @@ pub fn build_acceptor(cfg: &TlsConfig) -> anyhow::Result<TlsAcceptor> {
 }
 
 /// Carga certificado + clave desde archivos PEM.
-fn load_pem(cfg: &TlsConfig) -> anyhow::Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>)> {
+fn load_pem(
+    cfg: &TlsConfig,
+) -> anyhow::Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>)> {
     let cert_path = cfg.cert_path.as_ref().unwrap();
     let key_path = cfg
         .key_path

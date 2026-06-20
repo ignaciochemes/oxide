@@ -1,0 +1,16 @@
+# Config de Oxide para docker-compose. A diferencia de config.toml, escucha en
+# 0.0.0.0 (para que sea alcanzable desde fuera del contenedor) y apunta a los
+# microservicios por su NOMBRE DE SERVICIO de compose (svc1, svc2, svc3).
+listen = "0.0.0.0:8080"
+
+[[upstreams]]
+url = "http://svc1:3001"
+
+[[upstreams]]
+url = "http://svc2:3002"
+
+[[upstreams]]
+url = "http://svc3:3003"
+
+[admin]
+listen = "0.0.0.0:9090"
