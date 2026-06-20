@@ -7,6 +7,16 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
 
 ## [Sin publicar]
 
+### Añadido
+- Script de stress test con k6 (`scripts/k6-stress.js`) que carga los backends a
+  través de Oxide, con rampa de VUs, thresholds y desglose por endpoint.
+
+### Cambiado
+- El dashboard ahora detecta el host automáticamente (usa el mismo desde el que
+  se abrió + puertos 9090/8080), así funciona en localhost y en un server remoto
+  sin configurar variables de entorno. Igual se puede forzar con
+  `NEXT_PUBLIC_OXIDE_WS` / `NEXT_PUBLIC_OXIDE_API`.
+
 ## [0.5.0] - 2026-06-20
 
 ### Añadido

@@ -65,8 +65,16 @@ export type OxideState = {
   removePulse: (id: number) => void;
 };
 
-const WS_URL =
-  process.env.NEXT_PUBLIC_OXIDE_WS || "ws://127.0.0.1:9090/ws";
+// URL del WebSocket del admin. Si no se fija por env, usa el MISMO host desde el
+// que se abrió el dashboard (así funciona en localhost y en un server remoto sin
+// configurar nada) + el puerto del admin (9090).
+function wsUrl(): string {
+  if (process.env.NEXT_PUBLIC_OXIDE_WS) return process.env.NEXT_PUBLIC_OXIDE_WS;
+  if (typeof window !== "undefined") {
+    return `ws://${window.location.hostname}:9090/ws`;
+  }
+  return "ws://127.0.0.1:9090/ws";
+}
 
 /** Acorta una URL de backend a su host:puerto para mostrar. */
 export function shortName(url: string): string {
@@ -102,7 +110,7 @@ export function useOxide(): OxideState {
     let closed = false;
 
     const connect = () => {
-      ws = new WebSocket(WS_URL);
+      ws = new WebSocket(wsUrl());
 
       ws.onopen = () => setConnected(true);
 

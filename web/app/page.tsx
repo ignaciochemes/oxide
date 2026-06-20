@@ -63,8 +63,8 @@ export default function Page() {
 
       {!connected && (
         <div className="banner">
-          No hay conexión con Oxide. ¿Está corriendo? (admin en{" "}
-          <code>ws://127.0.0.1:9090/ws</code>)
+          No hay conexión con Oxide. ¿Está corriendo? (el admin escucha en el{" "}
+          <code>puerto 9090</code>)
         </div>
       )}
     </main>
