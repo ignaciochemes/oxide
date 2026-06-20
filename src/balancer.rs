@@ -8,20 +8,24 @@
 //! (salud, requests totales, requests activas) vive en atomics dentro de un
 //! `Arc<Backend>`, compartido entre el proxy y el health checker sin locks.
 
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 
 use hyper::Uri;
 
 use crate::config::Algorithm;
 
-/// Un backend: su URL, salud, requests totales y requests activas (en vuelo).
+/// Un backend: su URL, salud, requests totales/activas y su peso.
 #[derive(Debug)]
 pub struct Backend {
     pub uri: Uri,
     healthy: AtomicBool,
     requests: AtomicU64,
     active: AtomicU64,
+    /// Peso configurado (para el algoritmo weighted).
+    weight: u32,
+    /// Peso "corriente" del smooth weighted round-robin (se ajusta en cada pick).
+    current_weight: AtomicI64,
 }
 
 impl Backend {
@@ -52,6 +56,11 @@ impl Backend {
     pub fn dec_active(&self) {
         self.active.fetch_sub(1, Ordering::Relaxed);
     }
+
+    /// Peso configurado del backend.
+    pub fn weight(&self) -> u32 {
+        self.weight
+    }
 }
 
 /// Load balancer: un pool de backends + el algoritmo para elegir entre ellos.
@@ -61,14 +70,21 @@ pub struct Balancer {
     backends: Vec<Arc<Backend>>,
     algorithm: Algorithm,
     next: AtomicUsize,
+    /// Serializa la elección del smooth weighted round-robin (read-modify-write
+    /// de los pesos corrientes de todos los backends).
+    wrr_lock: Mutex<()>,
 }
 
 impl Balancer {
-    /// Construye el balancer con un nombre (para logs/dashboard), las URLs y el
-    /// algoritmo. Arrancan todos "sanos"; el health checker corrige enseguida.
-    pub fn new(name: impl Into<String>, urls: Vec<String>, algorithm: Algorithm) -> anyhow::Result<Self> {
+    /// Construye el balancer con un nombre (para logs/dashboard), los backends
+    /// (url + peso) y el algoritmo. Arrancan todos "sanos".
+    pub fn new(
+        name: impl Into<String>,
+        targets: Vec<(String, u32)>,
+        algorithm: Algorithm,
+    ) -> anyhow::Result<Self> {
         let mut backends = Vec::new();
-        for url in urls {
+        for (url, weight) in targets {
             let uri: Uri = url
                 .parse()
                 .map_err(|e| anyhow::anyhow!("upstream inválido '{url}': {e}"))?;
@@ -77,6 +93,8 @@ impl Balancer {
                 healthy: AtomicBool::new(true),
                 requests: AtomicU64::new(0),
                 active: AtomicU64::new(0),
+                weight: weight.max(1),
+                current_weight: AtomicI64::new(0),
             }));
         }
 
@@ -85,6 +103,7 @@ impl Balancer {
             backends,
             algorithm,
             next: AtomicUsize::new(0),
+            wrr_lock: Mutex::new(()),
         })
     }
 
@@ -123,6 +142,27 @@ impl Balancer {
                 let i = self.next.fetch_add(1, Ordering::Relaxed);
                 candidates[i % candidates.len()]
             }
+            Algorithm::Weighted => {
+                // Smooth weighted round-robin (algoritmo de nginx). Reparte
+                // según el peso pero sin ráfagas: intercala los backends.
+                let _guard = self.wrr_lock.lock().unwrap();
+                let total: i64 = healthy.iter().map(|&i| self.backends[i].weight as i64).sum();
+                let mut best = healthy[0];
+                let mut best_cw = i64::MIN;
+                for &i in &healthy {
+                    let cw = self.backends[i].current_weight.load(Ordering::Relaxed)
+                        + self.backends[i].weight as i64;
+                    self.backends[i].current_weight.store(cw, Ordering::Relaxed);
+                    if cw > best_cw {
+                        best_cw = cw;
+                        best = i;
+                    }
+                }
+                self.backends[best]
+                    .current_weight
+                    .fetch_sub(total, Ordering::Relaxed);
+                best
+            }
         };
 
         let backend = &self.backends[idx];
@@ -133,9 +173,5 @@ impl Balancer {
     /// Acceso a los backends (lo usan el health checker y el snapshot).
     pub fn backends(&self) -> &[Arc<Backend>] {
         &self.backends
-    }
-
-    pub fn upstream_list(&self) -> Vec<String> {
-        self.backends.iter().map(|b| b.uri.to_string()).collect()
     }
 }

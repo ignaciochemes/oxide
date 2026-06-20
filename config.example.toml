@@ -2,6 +2,10 @@
 # Oxide — config de ejemplo con TODAS las opciones explicadas.
 # Copiá lo que necesites a tu config.toml. Casi todo es opcional: lo único
 # obligatorio es `listen` y al menos un `[[upstreams]]`.
+#
+# RECARGA EN CALIENTE: editá este archivo y guardá; Oxide aplica los cambios de
+# upstreams, rutas y algoritmo en ~2s, SIN reiniciar. (Cambiar puertos o TLS sí
+# requiere reiniciar.)
 # =============================================================================
 
 # Dirección donde Oxide recibe el tráfico de los clientes.
@@ -10,21 +14,27 @@ listen = "127.0.0.1:8080"
 # -----------------------------------------------------------------------------
 # Backends por defecto: tus microservicios. Oxide reparte la carga entre ellos.
 # Si no usás rutas (más abajo), TODO el tráfico va a este pool.
+# `weight` es opcional (por defecto 1) y solo aplica con el algoritmo "weighted".
 # -----------------------------------------------------------------------------
 [[upstreams]]
 url = "http://127.0.0.1:3001"
+weight = 1
 
 [[upstreams]]
 url = "http://127.0.0.1:3002"
+weight = 1
 
 [[upstreams]]
 url = "http://127.0.0.1:3003"
+weight = 1
 
 # -----------------------------------------------------------------------------
 # Algoritmo de balanceo (opcional). Por defecto "round_robin".
 #   round_robin       -> rota parejo. Ideal si tus backends son idénticos.
 #   least_connections -> manda al que tiene menos requests en curso. Mejor si
 #                        las requests duran distinto.
+#   weighted          -> reparte según el `weight` de cada backend (ej. uno más
+#                        grande con weight=3 recibe ~3x el tráfico).
 # -----------------------------------------------------------------------------
 [balancer]
 algorithm = "round_robin"
@@ -64,10 +74,14 @@ max_retries = 2                  # reintentos en otro backend (solo idempotentes
 status_path = "/_oxide/status"   # GET acá devuelve el estado en JSON
 
 # -----------------------------------------------------------------------------
-# Dashboard / admin (opcional). Expone el estado y el WebSocket en vivo.
+# Dashboard / admin (opcional). Expone el estado, el WebSocket en vivo y el
+# panel de control (agregar/quitar backends y cambiar algoritmo desde la UI).
 # -----------------------------------------------------------------------------
 [admin]
 listen = "127.0.0.1:9090"
+# token = "un-secreto"   # si lo ponés, las ESCRITURAS del panel piden
+#                        # Authorization: Bearer <token>. Sin token, abierto
+#                        # (cómodo en localhost; ponelo si exponés el puerto).
 
 # -----------------------------------------------------------------------------
 # TLS / HTTPS (opcional, desactivado por defecto). Lo más fácil: poné

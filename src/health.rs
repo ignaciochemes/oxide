@@ -5,7 +5,6 @@
 //! No bloquea nada: mientras chequea, el resto de Oxide sigue atendiendo
 //! requests. Cuando un backend cambia de estado, lo logueamos.
 
-use std::sync::Arc;
 use std::time::Duration;
 
 use http_body_util::Empty;
@@ -17,11 +16,11 @@ use hyper_util::rt::TokioExecutor;
 
 use crate::config::HealthCheck;
 use crate::events::{self, Event, EventTx};
-use crate::router::Router;
+use crate::router::SharedRouter;
 
 /// Bucle infinito de chequeos. Se lanza una sola vez desde `main`.
-/// Chequea TODOS los pools del router (default + cada ruta).
-pub async fn run(router: Arc<Router>, cfg: HealthCheck, events: EventTx) {
+/// Chequea TODOS los pools del router actual (default + cada ruta).
+pub async fn run(router: SharedRouter, cfg: HealthCheck, events: EventTx) {
     // Cliente propio del health checker. Manda requests con body vacío
     // (`Empty<Bytes>`), por eso no podemos reusar el cliente del proxy, que
     // está tipado para reenviar el body entrante (`Incoming`).
@@ -39,8 +38,10 @@ pub async fn run(router: Arc<Router>, cfg: HealthCheck, events: EventTx) {
     );
 
     loop {
-        // Recorremos todos los pools y, dentro de cada uno, todos sus backends.
-        for balancer in router.balancers() {
+        // Tomamos el router actual (puede haber cambiado por recarga) y
+        // recorremos todos los pools y, dentro de cada uno, sus backends.
+        let current = router.load_full();
+        for balancer in current.balancers() {
             for backend in balancer.backends() {
                 let healthy = check_one(&client, &backend.uri, &cfg.path, timeout).await;
                 let was = backend.is_healthy();

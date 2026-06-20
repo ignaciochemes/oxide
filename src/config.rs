@@ -4,7 +4,7 @@
 //! El atributo `#[derive(Deserialize)]` es el que hace la magia: le dice a serde
 //! cómo construir el struct a partir del TOML.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// Configuración completa de Oxide, espejo de `config.toml`.
 #[derive(Debug, Deserialize)]
@@ -36,7 +36,7 @@ pub struct Config {
 }
 
 /// Algoritmo con el que el balancer elige el próximo backend.
-#[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum Algorithm {
     /// Rota en círculo, parejo. Ideal para backends idénticos.
@@ -45,6 +45,8 @@ pub enum Algorithm {
     /// Elige el backend con menos requests activas. Bueno si tienen latencias
     /// distintas o requests largas.
     LeastConnections,
+    /// Reparte según el `weight` de cada backend (smooth weighted round-robin).
+    Weighted,
 }
 
 /// Config del balanceo.
@@ -114,12 +116,18 @@ pub struct AdminConfig {
     /// Dirección donde escucha el admin, ej. `"127.0.0.1:9090"`.
     #[serde(default = "default_admin_listen")]
     pub listen: String,
+    /// Token opcional para proteger las acciones de ESCRITURA del panel de
+    /// control. Si está, hay que mandar `Authorization: Bearer <token>`. Si no
+    /// está (default), las escrituras quedan abiertas (cómodo en localhost).
+    #[serde(default)]
+    pub token: Option<String>,
 }
 
 impl Default for AdminConfig {
     fn default() -> Self {
         Self {
             listen: default_admin_listen(),
+            token: None,
         }
     }
 }
@@ -133,6 +141,14 @@ fn default_admin_listen() -> String {
 pub struct Upstream {
     /// URL base del backend, ej. `"http://127.0.0.1:3001"`.
     pub url: String,
+    /// Peso para el algoritmo `weighted` (por defecto 1). Un backend con peso 3
+    /// recibe ~3x el tráfico de uno con peso 1.
+    #[serde(default = "default_weight")]
+    pub weight: u32,
+}
+
+fn default_weight() -> u32 {
+    1
 }
 
 /// Parámetros del chequeo de salud de los backends.
@@ -220,8 +236,11 @@ impl Config {
         Ok(config)
     }
 
-    /// Devuelve solo las URLs de los upstreams (lo que necesita el balancer).
-    pub fn upstream_urls(&self) -> Vec<String> {
-        self.upstreams.iter().map(|u| u.url.clone()).collect()
+    /// Devuelve las URLs + peso de los upstreams por defecto.
+    pub fn upstream_targets(&self) -> Vec<(String, u32)> {
+        self.upstreams
+            .iter()
+            .map(|u| (u.url.clone(), u.weight))
+            .collect()
     }
 }

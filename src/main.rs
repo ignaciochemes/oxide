@@ -1,8 +1,8 @@
 //! Oxide: un reverse proxy / load balancer HTTP escrito en Rust.
 //!
-//! `main` arma el router (pool por defecto + reglas de routing), levanta el
-//! servidor proxy y el admin/dashboard, lanza el health checker y maneja el
-//! cierre ordenado (graceful shutdown) con Ctrl+C.
+//! `main` arma el router (pool por defecto + reglas de routing) detrás de un
+//! `ArcSwap` (para poder recargarlo en caliente), levanta el servidor proxy y el
+//! admin/dashboard, lanza el health checker y maneja el cierre ordenado.
 
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -10,6 +10,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Context;
+use arc_swap::ArcSwap;
 use http_body_util::combinators::BoxBody;
 use hyper::body::{Bytes, Incoming};
 use hyper::server::conn::http1;
@@ -23,6 +24,7 @@ use tokio::sync::watch;
 mod admin;
 mod balancer;
 mod config;
+mod configfile;
 mod events;
 mod health;
 mod proxy;
@@ -31,7 +33,7 @@ mod tls;
 
 use balancer::Balancer;
 use config::Config;
-use router::{Matcher, Route, Router};
+use router::{Matcher, Route, Router, SharedRouter};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -56,29 +58,9 @@ async fn main() -> anyhow::Result<()> {
         .parse()
         .with_context(|| format!("dirección de 'admin.listen' inválida: {}", config.admin.listen))?;
 
-    // --- Router: pool por defecto + reglas de routing ---
-    let algorithm = config.balancer.algorithm;
-    let default_balancer = Arc::new(Balancer::new("default", config.upstream_urls(), algorithm)?);
-
-    let mut routes = Vec::new();
-    for (i, rc) in config.routes.iter().enumerate() {
-        let name = rc.name.clone().unwrap_or_else(|| format!("route-{}", i + 1));
-        let balancer = Arc::new(Balancer::new(name.clone(), rc.upstreams.clone(), algorithm)?);
-        routes.push(Route {
-            matcher: Matcher {
-                host: rc.host.clone(),
-                path_prefix: rc.path_prefix.clone(),
-            },
-            balancer,
-        });
-        tracing::info!(
-            "ruta '{name}': host={:?} path_prefix={:?} -> {:?}",
-            rc.host,
-            rc.path_prefix,
-            rc.upstreams
-        );
-    }
-    let router = Arc::new(Router::new(default_balancer, routes));
+    // Router detrás de un ArcSwap: la recarga en caliente lo reemplaza sin frenar
+    // las requests en curso.
+    let router: SharedRouter = Arc::new(ArcSwap::from_pointee(build_router(&config)?));
 
     let client: proxy::ProxyClient = Client::builder(TokioExecutor::new()).build_http();
     let proxy_cfg = config.proxy.clone();
@@ -102,7 +84,14 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    // Health checker (chequea todos los pools).
+    // Recarga de config en caliente: vigila el archivo y reemplaza el router.
+    tokio::spawn(reload_task(
+        config_path.clone(),
+        router.clone(),
+        events.clone(),
+    ));
+
+    // Health checker (chequea todos los pools del router actual).
     tokio::spawn(health::run(
         router.clone(),
         config.health_check.clone(),
@@ -114,8 +103,12 @@ async fn main() -> anyhow::Result<()> {
         let router = router.clone();
         let events = events.clone();
         let shutdown_rx = shutdown_rx.clone();
+        let admin_config_path = config_path.clone();
+        let token = config.admin.token.clone();
         tokio::spawn(async move {
-            if let Err(err) = admin::run(admin_addr, router, events, shutdown_rx).await {
+            if let Err(err) =
+                admin::run(admin_addr, router, events, admin_config_path, token, shutdown_rx).await
+            {
                 tracing::error!("el servidor admin falló: {err:?}");
             }
         });
@@ -127,10 +120,9 @@ async fn main() -> anyhow::Result<()> {
         .with_context(|| format!("no pude escuchar en {listen_addr}"))?;
 
     tracing::info!("Oxide escuchando en {scheme}://{listen_addr}");
-    tracing::info!("Algoritmo: {:?}", algorithm);
-    tracing::info!("Pool por defecto: {:?}", router.balancers()[0].upstream_list());
+    tracing::info!("Algoritmo: {:?}", config.balancer.algorithm);
+    tracing::info!("Admin/dashboard en http://{admin_addr}");
 
-    // Contador de conexiones vivas, para esperarlas al cerrar.
     let active = Arc::new(AtomicUsize::new(0));
     let mut shutdown_proxy = shutdown_rx.clone();
 
@@ -161,14 +153,12 @@ async fn main() -> anyhow::Result<()> {
 
                     active.fetch_add(1, Ordering::Relaxed);
                     match tls_acceptor {
-                        // TLS: handshake y después servimos HTTP.
                         Some(acceptor) => match acceptor.accept(stream).await {
                             Ok(tls_stream) => {
                                 serve_conn(TokioIo::new(tls_stream), service, conn_shutdown, peer).await;
                             }
                             Err(err) => tracing::debug!("handshake TLS con {peer} falló: {err}"),
                         },
-                        // Texto plano.
                         None => {
                             serve_conn(TokioIo::new(stream), service, conn_shutdown, peer).await;
                         }
@@ -183,7 +173,6 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    // Dejamos de escuchar y esperamos a las conexiones en curso (con tope).
     drop(listener);
     let drain = async {
         while active.load(Ordering::Relaxed) > 0 {
@@ -201,9 +190,83 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Construye un `Router` (pool por defecto + reglas) a partir de la config.
+/// Se usa al arrancar y en cada recarga en caliente.
+fn build_router(config: &Config) -> anyhow::Result<Router> {
+    let algorithm = config.balancer.algorithm;
+
+    let default_balancer = Arc::new(Balancer::new(
+        "default",
+        config.upstream_targets(),
+        algorithm,
+    )?);
+
+    let mut routes = Vec::new();
+    for (i, rc) in config.routes.iter().enumerate() {
+        let name = rc.name.clone().unwrap_or_else(|| format!("route-{}", i + 1));
+        // Las rutas usan peso 1 por backend (el peso se configura en el pool default).
+        let targets: Vec<(String, u32)> = rc.upstreams.iter().map(|u| (u.clone(), 1)).collect();
+        let balancer = Arc::new(Balancer::new(name.clone(), targets, algorithm)?);
+        routes.push(Route {
+            matcher: Matcher {
+                host: rc.host.clone(),
+                path_prefix: rc.path_prefix.clone(),
+            },
+            balancer,
+        });
+        tracing::info!(
+            "ruta '{name}': host={:?} path_prefix={:?} -> {:?}",
+            rc.host,
+            rc.path_prefix,
+            rc.upstreams
+        );
+    }
+
+    Ok(Router::new(default_balancer, routes))
+}
+
+/// Vigila el archivo de config (por mtime) y, ante un cambio, reconstruye el
+/// router y lo reemplaza en caliente. Si la nueva config es inválida, mantiene
+/// la anterior y avisa por log (no se cae). Nota: cambios de puerto/TLS sí
+/// requieren reiniciar; esto recarga upstreams, rutas y algoritmo.
+async fn reload_task(path: String, router: SharedRouter, events: events::EventTx) {
+    let mtime = || std::fs::metadata(&path).and_then(|m| m.modified()).ok();
+    let mut last = mtime();
+
+    loop {
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        let current = mtime();
+        if current == last {
+            continue;
+        }
+        last = current;
+
+        match Config::load(&path).and_then(|cfg| build_router(&cfg)) {
+            Ok(new_router) => {
+                let new_router = Arc::new(new_router);
+                router.store(new_router.clone());
+                tracing::info!("config recargada en caliente desde '{path}'");
+
+                // Avisamos al dashboard del nuevo estado al instante.
+                let backends = proxy::snapshot_backends(&new_router);
+                let total_requests = backends.iter().map(|b| b.requests).sum();
+                events::emit(
+                    &events,
+                    events::Event::Snapshot {
+                        backends,
+                        total_requests,
+                    },
+                );
+            }
+            Err(err) => {
+                tracing::warn!("config inválida, mantengo la anterior: {err:#}");
+            }
+        }
+    }
+}
+
 /// Sirve una conexión HTTP/1 y, si llega la señal de shutdown, la cierra
-/// ordenadamente (termina la request en curso y no acepta más en esa conexión).
-/// Genérica sobre el tipo de IO para servir igual TCP plano o TLS.
+/// ordenadamente. Genérica sobre el IO para servir igual TCP plano o TLS.
 async fn serve_conn<I, S>(
     io: TokioIo<I>,
     service: S,
@@ -227,8 +290,6 @@ async fn serve_conn<I, S>(
                 break;
             }
             _ = shutdown.changed() => {
-                // Pedimos cierre ordenado; el await de arriba terminará cuando
-                // la conexión drene la request en curso.
                 conn.as_mut().graceful_shutdown();
             }
         }

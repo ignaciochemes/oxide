@@ -52,12 +52,16 @@ export type LogEntry = {
 
 export type Pulse = { id: number; backend: string; ok: boolean };
 
+/// Muestra liviana de una request, para calcular métricas en el front.
+export type ReqSample = { t: number; dur: number; ok: boolean; status: number };
+
 export type OxideState = {
   connected: boolean;
   backends: BackendInfo[];
   total: number;
   logs: LogEntry[];
   pulses: Pulse[];
+  recent: ReqSample[];
   removePulse: (id: number) => void;
 };
 
@@ -84,6 +88,7 @@ export function useOxide(): OxideState {
   const [total, setTotal] = useState(0);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [pulses, setPulses] = useState<Pulse[]>([]);
+  const [recent, setRecent] = useState<ReqSample[]>([]);
   const seq = useRef(0);
 
   const removePulse = useCallback(
@@ -132,6 +137,18 @@ export function useOxide(): OxideState {
           const pid = ++seq.current;
           setPulses((p) => [...p.slice(-60), { id: pid, backend: ev.backend, ok: ev.ok }]);
 
+          // Muestra para métricas; mantenemos solo los últimos 60s.
+          const sample: ReqSample = {
+            t: Date.now(),
+            dur: ev.duration_ms,
+            ok: ev.ok,
+            status: ev.status,
+          };
+          setRecent((r) => {
+            const cutoff = Date.now() - 60_000;
+            return [...r, sample].filter((s) => s.t > cutoff);
+          });
+
           const retries = ev.attempts > 1 ? ` · ${ev.attempts} intentos` : "";
           const text = `[${ev.route}] ${ev.method} ${ev.path} → ${shortName(ev.backend)} · ${ev.status} · ${ev.duration_ms}ms${retries}`;
           pushLog(setLogs, ++seq.current, "request", ev.ok, text);
@@ -160,7 +177,7 @@ export function useOxide(): OxideState {
     };
   }, []);
 
-  return { connected, backends, total, logs, pulses, removePulse };
+  return { connected, backends, total, logs, pulses, recent, removePulse };
 }
 
 function pushLog(

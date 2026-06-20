@@ -9,7 +9,14 @@
 
 use std::sync::Arc;
 
+use arc_swap::ArcSwap;
+
 use crate::balancer::Balancer;
+
+/// Router compartido y reemplazable en caliente. El proxy lee siempre la versión
+/// actual con `.load()`, y la recarga de config la cambia con `.store()` sin
+/// frenar nada ni reiniciar el proceso.
+pub type SharedRouter = Arc<ArcSwap<Router>>;
 
 /// Condición de match de una regla. Un campo en `None` significa "no filtra por
 /// eso". Con ambos en `None`, la regla matchea todo (catch-all).

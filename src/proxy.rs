@@ -4,7 +4,6 @@
 
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use http_body_util::{BodyExt, Full};
@@ -14,7 +13,7 @@ use hyper_util::client::legacy::connect::HttpConnector;
 use hyper_util::client::legacy::Client;
 
 use crate::events::{self, BackendInfo, Event, EventTx};
-use crate::router::Router;
+use crate::router::{Router, SharedRouter};
 
 pub type ProxyClient = Client<HttpConnector, Full<Bytes>>;
 type ProxyBody = http_body_util::combinators::BoxBody<Bytes, hyper::Error>;
@@ -23,12 +22,15 @@ static REQUEST_SEQ: AtomicU64 = AtomicU64::new(1);
 
 pub async fn handle(
     req: Request<Incoming>,
-    router: Arc<Router>,
+    shared_router: SharedRouter,
     client: ProxyClient,
     cfg: crate::config::ProxyConfig,
     events: EventTx,
     peer: SocketAddr,
 ) -> Result<Response<ProxyBody>, hyper::Error> {
+    // Tomamos la versión ACTUAL del router (puede haber cambiado por recarga).
+    let router = shared_router.load_full();
+
     // Endpoint interno de estado: lo atiende Oxide mismo, no se proxea.
     if req.uri().path() == cfg.status_path {
         return Ok(status_response(&router));
@@ -220,6 +222,7 @@ pub fn snapshot_backends(router: &Router) -> Vec<BackendInfo> {
                 healthy: b.is_healthy(),
                 requests: b.request_count(),
                 active: b.active(),
+                weight: b.weight(),
                 route: balancer.name().to_string(),
             });
         }

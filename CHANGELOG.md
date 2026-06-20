@@ -7,6 +7,32 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
 
 ## [Sin publicar]
 
+## [0.4.0] - 2026-06-20
+
+### Añadido
+- **Onboarding amigable** en el dashboard: tarjeta explicadora "¿Qué es esto?"
+  con una analogía simple (descartable), botón **"Probar tráfico"** que dispara
+  requests por el proxy para ver el diagrama en acción, y estados vacíos claros
+  ("todavía no hay servidores").
+- **Métricas en el dashboard** (últimos 60s, calculadas en vivo desde el stream
+  WebSocket): requests/seg, latencia media y p95, % de error, mini-gráfico de
+  RPS y desglose por familia de status (2xx/3xx/4xx/5xx).
+- **Panel de control en el dashboard**: agregar/quitar backends y cambiar el
+  algoritmo desde la UI, sin tocar archivos. Los cambios editan el `config.toml`
+  (preservando comentarios, vía `toml_edit`) y la recarga en caliente los aplica.
+- API de administración: `GET /api/config`, `POST`/`DELETE /api/backends`,
+  `PUT /api/algorithm`, con CORS y auth opcional por token (`[admin] token`).
+- La recarga en caliente ahora emite un `Snapshot` al dashboard, que se
+  actualiza al instante ante cualquier cambio de config.
+- **Weighted round-robin** (`[balancer] algorithm = "weighted"`): reparte según
+  el `weight` de cada backend (smooth WRR estilo nginx, sin ráfagas). El peso se
+  define por backend en `[[upstreams]]` (`weight`, default 1).
+- **Recarga de config en caliente**: Oxide vigila el archivo de config y aplica
+  cambios de upstreams, rutas y algoritmo en ~2s, sin reiniciar. Si la nueva
+  config es inválida, mantiene la anterior y avisa por log. (Implementado con
+  `arc-swap`: el router se reemplaza atómicamente, sin locks ni cortes.)
+- `weight` por backend visible en `/status` y el dashboard.
+
 ## [0.3.0] - 2026-06-20
 
 ### Añadido
@@ -77,7 +103,8 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
 - Logging estructurado con `tracing`, configurable vía `RUST_LOG`.
 - Script `scripts/toy-backend.js` para levantar backends de prueba.
 
-[Sin publicar]: https://github.com/ignaciochemes/oxide/compare/v0.3.0...HEAD
+[Sin publicar]: https://github.com/ignaciochemes/oxide/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/ignaciochemes/oxide/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/ignaciochemes/oxide/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/ignaciochemes/oxide/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ignaciochemes/oxide/releases/tag/v0.1.0

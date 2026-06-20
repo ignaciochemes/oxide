@@ -32,6 +32,7 @@ pub struct BackendInfo {
     pub healthy: bool,
     pub requests: u64,
     pub active: u64,
+    pub weight: u32,
     /// Nombre del pool/ruta al que pertenece (ej. "default" o "api").
     pub route: String,
 }

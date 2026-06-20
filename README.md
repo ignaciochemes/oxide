@@ -8,7 +8,9 @@ idénticos (estilo nginx / Traefik, pero propio y mínimo).
 
 - Proxy HTTP a nivel **L7** (entiende HTTP).
 - Balanceo **round-robin** entre N backends.
-- **Algoritmos de balanceo**: round-robin o least-connections.
+- **Algoritmos de balanceo**: round-robin, least-connections o weighted.
+- **Recarga en caliente**: editás `config.toml` y los cambios de upstreams,
+  rutas y algoritmo se aplican solos en ~2s, sin reiniciar.
 - **Routing por host/path** (estilo Traefik): reglas que mandan a distintos
   pools de backends según el dominio o el prefijo de la URL.
 - **TLS / HTTPS**: terminación TLS; cert self-signed automático para dev o tu
@@ -21,6 +23,10 @@ idénticos (estilo nginx / Traefik, pero propio y mínimo).
   requests de cada backend.
 - **Dashboard en vivo** (Next.js + WebSocket): diagrama de la infraestructura,
   pulsos animados por cada request, salud de los backends y feed de logs.
+- **Panel de control**: agregá/quitá backends y cambiá el algoritmo desde la UI;
+  los cambios se aplican solos (editan `config.toml` + recarga en caliente).
+- **Métricas en vivo**: requests/seg, latencia media/p95, % de error, gráfico de
+  RPS y desglose por status — todo en el dashboard.
 - **Graceful shutdown**: con Ctrl+C deja de aceptar conexiones y espera a las
   que están en curso (hasta 10s).
 - Configuración por archivo `config.toml`.
@@ -161,5 +167,11 @@ Próximos pasos pensados de menor a mayor dificultad:
 5. ✅ ~~**Algoritmos** — least-connections.~~ (hecho)
 6. ✅ ~~**Routing** — host/path estilo Traefik.~~ (hecho)
 7. ✅ ~~**HTTPS** — terminación TLS con `rustls`.~~ (hecho)
-8. **Weighted round-robin** — repartir según pesos por backend.
-9. **Recarga de config** — sin reiniciar el proceso.
+8. ✅ ~~**Weighted round-robin** — repartir según pesos por backend.~~ (hecho)
+9. ✅ ~~**Recarga de config** — sin reiniciar el proceso.~~ (hecho)
+
+Dashboard (hecho): panel de control para editar todo desde la UI, métricas en
+vivo y onboarding amigable.
+
+Ideas a futuro: empaquetado OSS (tests, CI, Docker, binarios), métricas
+Prometheus (`/metrics`), rate limiting, sticky sessions, caché de respuestas.
